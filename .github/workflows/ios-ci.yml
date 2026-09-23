@@ -5,40 +5,90 @@ on:
     branches:
       - main
 
+  # Permite ejecutarlo manualmente desde GitHub → Actions
+  workflow_dispatch:
+
 concurrency:
-  group: ios-ci-${{ github.event.pull_request.number }}
+  group: ios-ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
 
-  # ─────────────────────────────
+  # ─────────────────────────────────────────────
   # SwiftLint
-  # ─────────────────────────────
+  # Only Swift files changed in the Pull Request
+  # ─────────────────────────────────────────────
+
   lint:
     name: SwiftLint
     runs-on: macos-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Install SwiftLint
         run: brew install swiftlint
 
-      - name: Run SwiftLint
+      - name: Run SwiftLint on changed files
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          echo "Base branch: ${{ github.base_ref }}"
+          echo "Current SHA: ${{ github.sha }}"
+
+          git fetch origin "${{ github.base_ref }}"
+
+          FILES=$(git diff \
+            --name-only \
+            --diff-filter=ACMR \
+            "origin/${{ github.base_ref }}...HEAD" \
+            -- '*.swift')
+
+          if [ -z "$FILES" ]; then
+            echo "No Swift files changed."
+            exit 0
+          fi
+
+          echo "Swift files that WILL be linted:"
+          echo "$FILES"
+
+          COUNT=0
+
+          while IFS= read -r FILE; do
+            echo "[$COUNT] $FILE"
+            export "SCRIPT_INPUT_FILE_$COUNT=$FILE"
+            COUNT=$((COUNT + 1))
+          done <<< "$FILES"
+
+          export SCRIPT_INPUT_FILE_COUNT=$COUNT
+
+          echo "Total: $SCRIPT_INPUT_FILE_COUNT Swift file(s)"
+
+          swiftlint lint \
+            --strict \
+            --use-script-input-files
+
+      # workflow_dispatch no tiene github.base_ref.
+      # En ejecución manual revisamos todo el proyecto.
+      - name: Run SwiftLint manually
+        if: github.event_name == 'workflow_dispatch'
         run: swiftlint lint --strict
 
 
-  # ─────────────────────────────
-  # Build + Tests
-  # ─────────────────────────────
+  # ─────────────────────────────────────────────
+  # Build + Swift Testing
+  # ─────────────────────────────────────────────
+
   build-and-test:
     name: Build & Tests
     runs-on: macos-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -61,20 +111,29 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             clean build
 
-      - name: Run tests
+      - name: Select simulator
+        shell: bash
         run: |
           DEVICE=$(xcrun simctl list devices available \
             | grep "iPhone" \
             | head -1 \
             | sed -E 's/.*\(([0-9A-F-]+)\).*/\1/')
 
-          echo "Using simulator: $DEVICE"
+          if [ -z "$DEVICE" ]; then
+            echo "No available iPhone simulator found."
+            exit 1
+          fi
 
+          echo "Selected simulator: $DEVICE"
+          echo "SIMULATOR_ID=$DEVICE" >> "$GITHUB_ENV"
+
+      - name: Run tests
+        run: |
           xcodebuild \
             -project productsCatalogTest.xcodeproj \
             -scheme productsCatalogTest \
             -sdk iphonesimulator \
-            -destination "platform=iOS Simulator,id=$DEVICE" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             -configuration Debug \
             -enableCodeCoverage YES \
             CODE_SIGNING_ALLOWED=NO \
