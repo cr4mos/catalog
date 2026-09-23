@@ -11,6 +11,7 @@ import Observation
 @MainActor @Observable
 final class CatalogViewModel {
     private(set) var products: [Product] = []
+    private(set) var favoriteProducts: [Product]
     private(set) var isLoading = false
     private(set) var hasSnapshot = false
     private(set) var savedAt: Date?
@@ -20,13 +21,30 @@ final class CatalogViewModel {
     var favoritesOnly = false
 
     @ObservationIgnored private let loadCatalog: any LoadCatalogUseCase
+    @ObservationIgnored private let favorites: any FavoritesUseCase
+    @ObservationIgnored private let filterProducts = FilterProductsUseCase()
 
-    init(loadCatalog: any LoadCatalogUseCase) {
+    init(loadCatalog: any LoadCatalogUseCase, favorites: any FavoritesUseCase) {
         self.loadCatalog = loadCatalog
+        self.favorites = favorites
+        favoriteProducts = favorites.load()
     }
 
+    var favoriteIDs: Set<Int> { Set(favoriteProducts.map(\.id)) }
+
     func product(withID id: Product.ID?) -> Product? {
-        products.first { $0.id == id }
+        products.first { $0.id == id } ?? favoriteProducts.first { $0.id == id }
+    }
+
+    var visibleProducts: [Product] {
+        filterProducts.execute(
+            products: favoritesOnly ? favoriteProducts : products, query: query, favoritesOnly: favoritesOnly,
+            favoriteIDs: favoriteIDs
+        )
+    }
+
+    func toggleFavorite(_ product: Product) {
+        favoriteProducts = favorites.toggle(product)
     }
 
     func load() async {
@@ -49,6 +67,7 @@ final class CatalogViewModel {
         switch update {
         case .snapshot(let snapshot):
             products = snapshot.products
+            favoriteProducts = favorites.reconcile(with: snapshot.products)
             savedAt = snapshot.savedAt
             hasSnapshot = true
             notice = nil

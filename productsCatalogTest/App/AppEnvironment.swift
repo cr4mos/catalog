@@ -17,6 +17,8 @@ enum AppEnvironment {
                 repository: DefaultCatalogRepository(
                     service: ProductService(),
                     cache: DiskCatalogCache(fileURL: directory.appendingPathComponent("catalog-v1.json"))
-                )))
+                )),
+            favorites: DefaultFavoritesUseCase(repository: FavoritesStore())
+        )
     }
 }
