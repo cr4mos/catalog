@@ -1,0 +1,81 @@
+name: iOS CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ios-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ─────────────────────────────
+  # SwiftLint
+  # ─────────────────────────────
+  lint:
+    name: SwiftLint
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: Run SwiftLint
+        run: swiftlint lint --strict
+
+
+  # ─────────────────────────────
+  # Build + Tests
+  # ─────────────────────────────
+  build-and-test:
+    name: Build & Tests
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Resolve Swift Package dependencies
+        run: |
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project productsCatalogTest.xcodeproj \
+            -scheme productsCatalogTest
+
+      - name: Build
+        run: |
+          xcodebuild \
+            -project productsCatalogTest.xcodeproj \
+            -scheme productsCatalogTest \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            clean build
+
+      - name: Run tests
+        run: |
+          DEVICE=$(xcrun simctl list devices available \
+            | grep "iPhone" \
+            | head -1 \
+            | sed -E 's/.*\(([0-9A-F-]+)\).*/\1/')
+
+          echo "Using simulator: $DEVICE"
+
+          xcodebuild \
+            -project productsCatalogTest.xcodeproj \
+            -scheme productsCatalogTest \
+            -sdk iphonesimulator \
+            -destination "platform=iOS Simulator,id=$DEVICE" \
+            -configuration Debug \
+            -enableCodeCoverage YES \
+            CODE_SIGNING_ALLOWED=NO \
+            test
