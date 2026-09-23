@@ -8,6 +8,7 @@
 import Foundation
 
 enum CatalogLoadUpdate: Equatable {
+    case cachedSnapshot(CatalogSnapshot)
     case snapshot(CatalogSnapshot)
     case cacheUnavailable
     case cacheWriteFailed
@@ -34,7 +35,7 @@ struct DefaultLoadCatalogUseCase: LoadCatalogUseCase {
             do {
                 if let snapshot = try await repository.cachedSnapshot() {
                     try Task.checkCancellation()
-                    onUpdate(.snapshot(snapshot))
+                    onUpdate(.cachedSnapshot(snapshot))
                     hasSnapshot = true
                 }
             } catch {

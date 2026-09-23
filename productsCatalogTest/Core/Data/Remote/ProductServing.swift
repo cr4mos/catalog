@@ -38,7 +38,7 @@ struct ProductService: ProductServing {
             URLQueryItem(
                 name: "select",
                 value: "id,title,description,category,price,rating,stock,brand,thumbnail,images"
-            ),
+            )
         ]
         guard let url = components.url else { throw CatalogError.invalidResponse }
         var request = URLRequest(url: url)

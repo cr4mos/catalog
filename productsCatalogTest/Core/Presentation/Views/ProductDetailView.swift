@@ -21,13 +21,10 @@ struct ProductDetailView: View {
 
                 VStack(alignment: .leading, spacing: DS.Space.sm) {
                     DSBadge(
-                        title: product.category.replacingOccurrences(of: "-", with: " ").capitalized,
+                        title: product.categoryName,
                         tone: .sky)
                     Text(product.title).font(DS.TypeStyle.title)
                         .accessibilityAddTraits(.isHeader)
-                    if let brand = product.brand {
-                        Text(brand).font(DS.TypeStyle.detail).foregroundStyle(DS.Palette.muted)
-                    }
                     Text(product.formattedPrice).font(DS.TypeStyle.price)
                     Text("Precios en MXN").font(DS.TypeStyle.caption).foregroundStyle(DS.Palette.muted)
                 }
@@ -38,11 +35,12 @@ struct ProductDetailView: View {
                 }
                 DSCard {
                     VStack(alignment: .leading, spacing: DS.Space.sm) {
-                        Text("Acerca del producto").font(DS.TypeStyle.section)
+                        Text("Información del producto").font(DS.TypeStyle.section)
                             .accessibilityAddTraits(.isHeader)
-                        Text(product.description).font(DS.TypeStyle.body).textSelection(.enabled)
-                            .foregroundStyle(DS.Palette.muted)
+                        LabeledContent("Marca", value: product.brand ?? "No especificada")
+                        LabeledContent("Categoría", value: product.categoryName)
                     }
+                    .font(DS.TypeStyle.body)
                 }
             }
             .padding(DS.Space.lg)

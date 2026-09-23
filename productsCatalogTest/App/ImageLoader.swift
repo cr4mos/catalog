@@ -45,7 +45,7 @@ actor ImageLoader: ImageLoading {
                     kCGImageSourceCreateThumbnailFromImageAlways: true,
                     kCGImageSourceThumbnailMaxPixelSize: maxPixels,
                     kCGImageSourceCreateThumbnailWithTransform: true,
-                    kCGImageSourceShouldCacheImmediately: true,
+                    kCGImageSourceShouldCacheImmediately: true
                 ] as CFDictionary
             )
         else { throw CatalogError.invalidResponse }

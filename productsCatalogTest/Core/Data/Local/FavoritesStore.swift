@@ -19,11 +19,10 @@ struct FavoritesStore: FavoritesRepository {
 
     func load() -> [Product] {
         if let data = defaults.data(forKey: key),
-            let products = try? JSONDecoder().decode([ProductDTO].self, from: data)
-        {
+            let products = try? JSONDecoder().decode([ProductDTO].self, from: data) {
             return products.map(\.domain)
         }
-        
+
         return (defaults.array(forKey: legacyKey) as? [Int] ?? []).map { id in
             Product(
                 id: id, title: "Producto #\(id)", description: "Producto guardado en favoritos.",

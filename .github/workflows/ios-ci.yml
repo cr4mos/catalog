@@ -2,139 +2,73 @@ name: iOS CI
 
 on:
   pull_request:
-    branches:
-      - main
-
-  # Permite ejecutarlo manualmente desde GitHub → Actions
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ios-ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-
-  # ─────────────────────────────────────────────
-  # SwiftLint
-  # Only Swift files changed in the Pull Request
-  # ─────────────────────────────────────────────
-
   lint:
     name: SwiftLint
     runs-on: macos-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
       - name: Install SwiftLint
         run: brew install swiftlint
-
-      - name: Run SwiftLint on changed files
-        if: github.event_name == 'pull_request'
-        shell: bash
-        run: |
-          echo "Base branch: ${{ github.base_ref }}"
-          echo "Current SHA: ${{ github.sha }}"
-
-          git fetch origin "${{ github.base_ref }}"
-
-          FILES=$(git diff \
-            --name-only \
-            --diff-filter=ACMR \
-            "origin/${{ github.base_ref }}...HEAD" \
-            -- '*.swift')
-
-          if [ -z "$FILES" ]; then
-            echo "No Swift files changed."
-            exit 0
-          fi
-
-          echo "Swift files that WILL be linted:"
-          echo "$FILES"
-
-          COUNT=0
-
-          while IFS= read -r FILE; do
-            echo "[$COUNT] $FILE"
-            export "SCRIPT_INPUT_FILE_$COUNT=$FILE"
-            COUNT=$((COUNT + 1))
-          done <<< "$FILES"
-
-          export SCRIPT_INPUT_FILE_COUNT=$COUNT
-
-          echo "Total: $SCRIPT_INPUT_FILE_COUNT Swift file(s)"
-
-          swiftlint lint \
-            --strict \
-            --use-script-input-files
-
-      # workflow_dispatch no tiene github.base_ref.
-      # En ejecución manual revisamos todo el proyecto.
-      - name: Run SwiftLint manually
-        if: github.event_name == 'workflow_dispatch'
-        run: swiftlint lint --strict
-
-
-  # ─────────────────────────────────────────────
-  # Build + Swift Testing
-  # ─────────────────────────────────────────────
+      - name: Validate all Swift sources
+        run: swiftlint lint --strict --no-cache
 
   build-and-test:
     name: Build & Tests
     runs-on: macos-latest
-
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
       - name: Show Xcode version
         run: xcodebuild -version
-
-      - name: Resolve Swift Package dependencies
-        run: |
-          xcodebuild \
-            -resolvePackageDependencies \
-            -project productsCatalogTest.xcodeproj \
-            -scheme productsCatalogTest
-
-      - name: Build
-        run: |
-          xcodebuild \
-            -project productsCatalogTest.xcodeproj \
-            -scheme productsCatalogTest \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO \
-            clean build
-
-      - name: Select simulator
+      - name: Select available iPhone simulator
         shell: bash
         run: |
-          DEVICE=$(xcrun simctl list devices available \
-            | grep "iPhone" \
-            | head -1 \
-            | sed -E 's/.*\(([0-9A-F-]+)\).*/\1/')
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/simulators.json"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
 
-          if [ -z "$DEVICE" ]; then
-            echo "No available iPhone simulator found."
-            exit 1
-          fi
-
-          echo "Selected simulator: $DEVICE"
-          echo "SIMULATOR_ID=$DEVICE" >> "$GITHUB_ENV"
-
-      - name: Run tests
+          devices = json.loads((Path(os.environ["RUNNER_TEMP"]) / "simulators.json").read_text())["devices"]
+          iphones = [
+              device for runtime, entries in devices.items()
+              if ".iOS-" in runtime and int(runtime.split(".iOS-")[1].split("-")[0]) >= 17
+              for device in entries
+              if device["isAvailable"] and device["name"].startswith("iPhone")
+          ]
+          if not iphones:
+              raise SystemExit("No available iPhone simulator with iOS 17 or later.")
+          with open(os.environ["GITHUB_ENV"], "a") as environment:
+              environment.write(f"SIMULATOR_ID={iphones[0]['udid']}\n")
+          print(f"Selected: {iphones[0]['name']} ({iphones[0]['udid']})")
+          PY
+      - name: Build and run unit tests with coverage
         run: |
           xcodebuild \
             -project productsCatalogTest.xcodeproj \
             -scheme productsCatalogTest \
-            -sdk iphonesimulator \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             -configuration Debug \
             -enableCodeCoverage YES \
+            -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             test
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-test-results
+          path: TestResults.xcresult
+          if-no-files-found: warn

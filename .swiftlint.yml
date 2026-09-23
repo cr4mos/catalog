@@ -1,0 +1,9 @@
+included:
+  - productsCatalogTest
+  - productsCatalogTestTests
+
+# Abreviaturas deliberadas del sistema de diseño y de identificadores de dominio.
+identifier_name:
+  excluded: [id, xs, sm, md, lg, xl]
+type_name:
+  excluded: [DS]

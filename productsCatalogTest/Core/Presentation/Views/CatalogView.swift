@@ -59,13 +59,13 @@ struct CatalogView: View {
 
     @ViewBuilder
     private var content: some View {
-        if !viewModel.hasSnapshot && viewModel.isLoading {
+        if viewModel.showsInitialLoading {
             VStack(spacing: DS.Space.md) {
                 ProgressView()
                 Text("Preparando tu catálogo…").foregroundStyle(DS.Palette.muted)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let message = viewModel.errorMessage {
+        } else if let message = viewModel.blockingErrorMessage {
             ContentUnavailableView {
                 Label("No pudimos conectar", systemImage: "wifi.exclamationmark")
             } description: {
@@ -94,13 +94,17 @@ struct CatalogView: View {
                         top: DS.Space.xs, leading: DS.Space.md,
                         bottom: DS.Space.md, trailing: DS.Space.md))
             }
-            if let notice = viewModel.notice {
+            if let notice = viewModel.listNotice {
                 DSCard(fill: DS.Palette.sky) {
                     VStack(alignment: .leading, spacing: DS.Space.sm) {
                         Label(notice, systemImage: "info.circle")
                             .font(DS.TypeStyle.detail)
                         if let date = viewModel.savedAt {
-                            Text("Última actualización: \(date.formatted(date: .abbreviated, time: .shortened))")
+                            let formattedDate = date.formatted(
+                                .dateTime.day().month(.abbreviated).year().hour().minute()
+                                    .locale(Locale(identifier: "es_MX"))
+                            )
+                            Text("Última actualización: \(formattedDate)")
                                 .font(DS.TypeStyle.caption)
                                 .foregroundStyle(DS.Palette.muted)
                         }
@@ -178,7 +182,7 @@ struct ProductRow: View {
                     .frame(width: 76, height: 96)
             }
             VStack(alignment: .leading, spacing: DS.Space.xs) {
-                Text(product.category.replacingOccurrences(of: "-", with: " ").capitalized)
+                Text(product.categoryName)
                     .font(DS.TypeStyle.caption)
                     .foregroundStyle(DS.Palette.muted)
                 Text(product.title).font(DS.TypeStyle.headline)
