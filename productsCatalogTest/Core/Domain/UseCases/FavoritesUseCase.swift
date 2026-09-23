@@ -28,6 +28,7 @@ struct DefaultFavoritesUseCase: FavoritesUseCase {
         return products
     }
 
+    /// Keep the last known details when a favorite disappears, with zero available stock.
     func reconcile(with catalog: [Product]) -> [Product] {
         let products = repository.load().map { favorite in
             catalog.first(where: { $0.id == favorite.id }) ?? favorite.withoutStock

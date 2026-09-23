@@ -11,14 +11,20 @@ struct FilterProductsUseCase {
     func execute(
         products: [Product], query: String, favoritesOnly: Bool, favoriteIDs: Set<Int>
     ) -> [Product] {
-        let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let terms = normalized(query).split(whereSeparator: \.isWhitespace)
         return products.filter { product in
-            let matches =
-                term.isEmpty
-                || [product.title, product.category, product.brand ?? ""].contains {
-                    $0.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil
-                }
+            let searchable = normalized(
+                [product.title, product.category, product.categoryName, product.brand ?? ""].joined(separator: " ")
+            )
+            let matches = terms.allSatisfy { searchable.contains($0) }
             return matches && (!favoritesOnly || favoriteIDs.contains(product.id))
         }
+    }
+
+    private func normalized(_ value: String) -> String {
+        value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "es_MX"))
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
     }
 }

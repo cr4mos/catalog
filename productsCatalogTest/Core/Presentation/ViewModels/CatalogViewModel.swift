@@ -32,8 +32,12 @@ final class CatalogViewModel {
 
     var favoriteIDs: Set<Int> { Set(favoriteProducts.map(\.id)) }
 
+    var showsInitialLoading: Bool { !favoritesOnly && !hasSnapshot && isLoading }
+    var blockingErrorMessage: String? { favoritesOnly ? nil : errorMessage }
+    var listNotice: String? { favoritesOnly ? (notice ?? errorMessage) : notice }
+
     func product(withID id: Product.ID?) -> Product? {
-        products.first { $0.id == id } ?? favoriteProducts.first { $0.id == id }
+        favoriteProducts.first { $0.id == id } ?? products.first { $0.id == id }
     }
 
     var visibleProducts: [Product] {
@@ -65,6 +69,12 @@ final class CatalogViewModel {
 
     private func apply(_ update: CatalogLoadUpdate) {
         switch update {
+        case .cachedSnapshot(let snapshot):
+            products = snapshot.products.map { cached in
+                favoriteProducts.first { $0.id == cached.id } ?? cached
+            }
+            savedAt = snapshot.savedAt
+            hasSnapshot = true
         case .snapshot(let snapshot):
             products = snapshot.products
             favoriteProducts = favorites.reconcile(with: snapshot.products)
